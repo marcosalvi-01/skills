@@ -1,0 +1,111 @@
+name: test
+domain: localhost
+protocol: http
+components:
+  platform_gui:
+    base_url: /
+    port: 32000
+  gateway:
+    aai:
+      enabled: true
+      service_endpoint: ""
+      gateway_endpoint: ""
+    base_url: /api/v1
+    swagger_page:
+      tile: EPOS API Gateway
+      version: 2.0.0
+      contact_email: ""
+    port: 33000
+  backoffice:
+    enabled: true
+    gui:
+      base_url: /backoffice
+      port: 34000
+    service:
+      auth:
+        enabled: true
+        only_admin: false
+  converter:
+    enabled: false
+    auth:
+      enabled: false
+      only_admin: false
+  resources_service:
+    auth:
+      enabled: false
+      only_admin: false
+    cache_ttl: 50000
+    cache_facets: 5000
+  ingestor_service:
+    auth:
+      enabled: false
+      only_admin: false
+    hash: FA9BEB99E4029AD5A6615399E7BBAE21356086B3
+  external_access_service:
+    auth:
+      enabled: false
+      only_admin: false
+  sharing_service:
+    enabled: false
+    auth:
+      enabled: false
+      only_admin: false
+  rabbitmq:
+    host: rabbitmq
+    username: rabbitmq-user
+    password: changeme
+    vhost: changeme
+  metadata_database:
+    user: metadatauser
+    password: changeme
+    host: metadata-database
+    port: 5432
+    published_port: 0
+    db_name: cerif
+    connection_pool_init_size: 5
+    connection_pool_min_size: 5
+    connection_pool_max_size: 15
+  email_sender_service:
+    enabled: false
+    auth:
+      enabled: false
+      only_admin: false
+    environment_type: development
+    sender: data-portal
+    sender_name: EPOS Platform Opensource
+    mail_type: API
+    sender_domain: your.domain.com
+    mail_host: mail.domain.com
+    mail_user: user@email.com
+    mail_password: changeme
+    dev_emails: foo.bar@somewhere.com;change.me@somewhere.com
+    mail_api_url: https://api.example.email/
+    mail_api_key: changeme
+  aai_service:
+    enabled: true
+    port: 35000
+    name: EPOS
+    surname: User
+    email: epos@epos.eu
+    password: epos
+monitoring:
+  enabled: false
+  url: ""
+  user: ""
+  password: ""
+  security_key: ""
+images:
+  rabbitmq_image: rabbitmq:3.13.7-management
+  dataportal_image: ghcr.io/epos-eric/epos-gui:latest
+  gateway_image: ghcr.io/epos-eric/epos-api-gateway:latest
+  metadata_database_image: ghcr.io/epos-eric/metadata-database/deploy:latest
+  resources_service_image: ghcr.io/epos-eric/resources-service:latest
+  ingestor_service_image: ghcr.io/epos-eric/ingestor-service:latest
+  external_access_image: ghcr.io/epos-eric/external-access-service:latest
+  converter_service_image: ghcr.io/epos-eric/converter-service-go:latest
+  converter_routine_image: ghcr.io/epos-eric/converter-routine-go:latest
+  backoffice_service_image: ghcr.io/epos-eric/backoffice-service:latest
+  backoffice_ui_image: ghcr.io/epos-eric/epos-backoffice-gui:latest
+  email_sender_service_image: ghcr.io/epos-eric/email-sender-service:latest
+  sharing_service_image: ghcr.io/epos-eric/sharing-service:latest
+  aai_service_image: ghcr.io/epos-eric/oss-aai-service:latest
