@@ -31,6 +31,28 @@ Ignore k8s for this skill.
 9. Verify by running `epos-opensource docker list` to get generated GUI, API, and backoffice URLs, then check `epos-opensource docker get <env>` if you need applied config.
 10. Use `populate` for data setup, `clean` for data reset, and `delete` for teardown.
 
+## Custom Environment Backoffice Access
+
+For custom environments, always place all users and products in the `all` group for simplicity.
+
+- The first user to log in becomes an admin.
+- Admins can join groups without requesting access.
+- Every other user must be accepted before joining a group.
+
+## Database Debugging
+
+To let the agent query the metadata database directly from the host, set `components.metadata_database.published_port` to an available host port, such as `5432`. Then use `psql` with connection values from the YAML config or `epos-opensource docker get <env> --output <file>`:
+
+```bash
+PGPASSWORD=<components.metadata_database.password> psql \
+  -h localhost \
+  -p <components.metadata_database.published_port> \
+  -U <components.metadata_database.user> \
+  -d <components.metadata_database.db_name>
+```
+
+Use direct database queries for debugging when API or UI inspection is insufficient. Keep the published port internal-only (`0`) when direct host access is not needed, and check for port conflicts before using `5432`.
+
 ## Command Use
 
 Before using any docker command, read live help from the installed CLI:

@@ -60,7 +60,7 @@ components:
     password: changeme
     host: metadata-database
     port: 5432
-    published_port: 0
+    published_port: 5432
     db_name: cerif
     connection_pool_init_size: 5
     connection_pool_min_size: 5
