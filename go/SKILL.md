@@ -464,6 +464,22 @@ for _, item := range items {
 
 ## Configuration and Struct Design
 
+### Struct Literal Formatting
+
+Struct literals with more than 2 attributes must use multiline formatting. Keep one field per line and align values:
+
+```go
+SomeStruct{
+	ID:        value.ID,
+	Name:      value.Name,
+	Label:     value.Label,
+	Position:  value.Position,
+	Metadata:  value.Metadata,
+}
+```
+
+Never format struct literals with more than 2 attributes on one line.
+
 ### Functional Options for Complex Initialization
 
 For many optional config parameters, avoid massive constructors. Use Functional Options.
