@@ -9,22 +9,20 @@ description: >
 
 # Idiomatic Go: The Go Way
 
-Idiomatic Go patterns and best practices for building robust, efficient, and maintainable applications.
+Idiomatic Go patterns for robust, efficient, maintainable apps.
 
 ## When to Activate
 
-- Writing new Go code
-- Reviewing or auditing existing Go code
-- Refactoring Go code (especially code that looks like Java/Spring Boot patterns in Go)
+- Writing, reviewing, auditing, or refactoring Go code, especially Java/Spring Boot-like code
 - Designing Go packages, modules, or APIs
-- Choosing between stdlib and third-party libraries
-- Any question about Go project structure, error handling, concurrency, or testing
+- Choosing stdlib vs third-party libraries
+- Questions about Go structure, errors, concurrency, or testing
 
 ## Core Principles
 
 ### 1. Clear is Better than Clever
 
-Go favors readability and simplicity over abstraction and cleverness. Code should be obvious. If you have to read a function three times to understand its control flow, it needs to be rewritten.
+Go favors readable, simple, obvious code over abstraction and cleverness. Rewrite functions whose control flow needs repeated reading.
 
 ```go
 // Idiomatic: Direct, linear control flow. Note: no "Get" prefix — Go omits it.
@@ -39,7 +37,7 @@ func LookupUser(id string) (*User, error) {
 
 ### 2. Make the Zero Value Useful
 
-Design types so their zero value is immediately usable without initialization. This eliminates boilerplate constructors. `sync.Mutex` and `bytes.Buffer` are the gold standard for this.
+Design types with immediately usable zero values. Avoid constructor boilerplate. `sync.Mutex` and `bytes.Buffer` exemplify this.
 
 ```go
 // Idiomatic: Ready to use immediately
@@ -57,11 +55,11 @@ func (c *Counter) Inc() {
 
 ### 3. Return Early, Keep the Happy Path Left
 
-Handle errors and edge cases immediately and return. Do not use `else` blocks for the main logic. The "happy path" of your function should never be indented.
+Handle errors and edge cases immediately. Return early; avoid `else` for main logic. Keep happy path unindented.
 
 ### 4. Separate Logical Sections with Blank Lines
 
-Inside a function, use a blank line to mark the boundary between logical sections — setup, one phase of work, the next phase, cleanup — the way you'd use paragraph breaks in prose. Don't cram unrelated steps into one unbroken block, and don't scatter blank lines between every single statement either; group the lines that belong to the same step, then break.
+Use blank lines between logical sections: setup, work phases, cleanup. Group related statements; don't cram unrelated steps or separate every statement.
 
 ```go
 func Run(cfg config.Config, deps Deps) error {
@@ -117,17 +115,17 @@ func Run(cfg config.Config, deps Deps) error {
 }
 ```
 
-Each blank line answers "what is this next chunk of code doing." A `defer` paired with the setup it cleans up stays adjacent to that setup, not pushed apart by a section break.
+Each blank line marks next code chunk's purpose. Keep cleanup `defer` beside its setup.
 
 ## Package Organization: Domain-First, Dependency-Grouped
 
-**Anti-Pattern:** Grouping code by technical layer or type — `models/`, `controllers/`, `handlers/`, `services/`, `repository/`. Go has no file-level separation, only package-level, so a `models/` package smashes every domain (`order`, `user`, `product`) into one namespace with no indication at the import site which domain an identifier belongs to. This causes circular dependencies the moment two domains need to reference each other. Reject it, and reject `utils/`, `helpers/`, and `common/` too — same symptom of unclear ownership.
+**Anti-Pattern:** Grouping by technical layer/type: `models/`, `controllers/`, `handlers/`, `services/`, `repository/`. Go separates at package level, so shared technical packages mix domains and obscure ownership. This invites circular dependencies. Reject `utils/`, `helpers/`, and `common/` too.
 
-Packages define bounded contexts, not files within a package — delineate domains by top-level package, not by file name.
+Packages define bounded contexts. Delineate domains by top-level package, not filename.
 
 ### 1. Domain Types Depend on Nothing
 
-Domain types and the interfaces that describe operations on them must not import anything else in the app — no database driver, no HTTP, no third-party SDK.
+Domain types and interfaces import nothing from app or adapters: no database driver, HTTP, or third-party SDK.
 
 ```go
 // order/order.go — pure domain type + the interface consumers need. No imports
@@ -146,7 +144,7 @@ type Repository interface {
 
 ### 2. One Package Per Domain
 
-A single-domain app can keep its domain types in the root package. Once an app has more than one genuinely distinct domain, give each its own top-level package instead of collapsing them into one root — `order` and `user` are different bounded contexts and belong in different packages, each import-free of the other.
+Single-domain apps may keep types in root. Multiple distinct domains get separate top-level packages: `order` and `user` are separate bounded contexts, each import-free of the other.
 
 ```
 mystore/
@@ -161,11 +159,11 @@ mystore/
         └── main.go
 ```
 
-The signal to split a domain into its own package: can it be described in one sentence, with no need to know about other domains? If yes, it earns its own package. Domain packages never import each other sideways — a needed dependency between two domains means the boundary is wrong, or the dependency belongs behind an interface (see #4).
+Split a domain when it can be described in one sentence without other domains. Domain packages never import each other sideways; use an interface for needed dependencies (see #4).
 
 ### 3. Group Adapters by Dependency, Not by Domain
 
-Once a domain needs a database, an HTTP API, or a third-party service, push that dependency into its own subpackage named after the thing it wraps — `postgres`, `stripe`, `http`, not a domain-suffixed name. That subpackage implements the domain's interface:
+Push database, HTTP API, or third-party dependencies into subpackages named after wrapped dependency: `postgres`, `stripe`, `http`. Subpackage implements domain interface:
 
 ```go
 // postgres/order.go
@@ -191,13 +189,13 @@ func (r *Repository) Order(id int) (*order.Order, error) {
 }
 ```
 
-This makes the dependency swappable and lets implementations layer (e.g. an in-memory cache wrapping `postgres.Repository`, both satisfying `order.Repository`). Applies to stdlib wrapping too — put `net/http`-specific code in your own `http` adapter package rather than letting it leak into domains.
+Dependencies become swappable and implementations can layer, e.g. in-memory cache wrapping `postgres.Repository`, both satisfying `order.Repository`. Put `net/http` code in `http` adapter package, not domains.
 
-Grouping every adapter under one `http/` or `postgres/` package is fine even across multiple domains, since they're only wired together in `cmd/`. Splitting per-domain (`http/order/`, `postgres/order/`) is also fine if an adapter layer gets large. Domains require package-level separation; adapters don't.
+One `http/` or `postgres/` package can span domains because `cmd/` wires adapters. Split per-domain (`http/order/`, `postgres/order/`) when large. Domains require package separation; adapters don't.
 
 ### 4. Wire Dependencies Behind Domain Interfaces, Not Concretely
 
-When one domain's implementation needs another dependency (e.g. an `order` adapter needs to charge a card), depend on a domain interface, not the concrete adapter:
+When implementation needs another dependency, depend on domain interface, not concrete adapter:
 
 ```go
 type Repository struct {
@@ -206,11 +204,11 @@ type Repository struct {
 }
 ```
 
-This keeps adapters swappable independently of one another.
+Adapters stay independently swappable.
 
 ### 5. A Shared `mock` Subpackage for Testing
 
-Hand-write simple mocks that implement domain interfaces, collected in one `mock` subpackage, rather than reaching for a mocking framework:
+Hand-write simple domain-interface mocks in one `mock` subpackage; avoid mocking frameworks:
 
 ```go
 // mock/order.go
@@ -230,11 +228,11 @@ func (r *Repository) Order(id int) (*order.Order, error) {
 }
 ```
 
-Inject `&mock.Repository{OrderFn: ...}` anywhere `order.Repository` is expected. Complements, doesn't replace, the fakes/stubs and table-driven testing patterns below.
+Inject `&mock.Repository{OrderFn: ...}` wherever `order.Repository` is expected. Complements fakes/stubs and table-driven tests.
 
 ### 6. `main` Lives Under `cmd/`, and Only Wires
 
-Use the `cmd/<binary-name>/main.go` convention even for a single binary — it leaves room for a second one later without restructuring. `main` chooses which concrete adapters to inject into which domain interfaces; it contains no business logic itself.
+Use `cmd/<binary-name>/main.go` even for one binary; leaves room for more. `main` selects concrete adapters and wires domain interfaces; no business logic.
 
 ```go
 // cmd/mystore/main.go
@@ -255,7 +253,7 @@ func main() {
 
 ### Dependency Direction
 
-Domains never import adapters or `cmd`. Adapters import the domains they implement. `cmd` imports and wires everything. Go's compiler enforces this — import cycles won't build, so a stray domain→adapter import fails fast:
+Domains never import adapters or `cmd`. Adapters import domains. `cmd` imports and wires everything. Compiler rejects import cycles, catching domain→adapter mistakes:
 
 ```
 +-----------+     +-----------+
@@ -275,17 +273,17 @@ Domains never import adapters or `cmd`. Adapters import the domains they impleme
 
 ### On `internal/`
 
-Reach for `internal/` only when a package needs to be importable across your own subpackages but must not be importable by outside modules. For an executable binary nobody imports anyway, `internal/` is usually just extra path depth — skip it unless a real need for that boundary shows up.
+Use `internal/` when package must be shared within your module but hidden from outside modules. For standalone executables, skip extra depth unless boundary is needed.
 
 ## Interface Design
 
 ### 1. Interfaces are Discovered, Not Designed Upfront
 
-Write concrete types first. Only define an interface when you discover that multiple types need to be used interchangeably by a consumer.
+Write concrete types first. Define interfaces when a consumer needs interchangeable implementations.
 
 ### 2. Define Interfaces Where They Are Used
 
-Interfaces belong in the package that _consumes_ them, not the package that _implements_ them. This decouples your packages.
+Interfaces belong in consuming package, not implementing package. Decouples packages.
 
 ```go
 // processor/processor.go
@@ -303,13 +301,13 @@ type Processor struct {
 
 ### 3. Accept Interfaces, Return Structs
 
-Require the smallest interface possible as an input parameter (e.g., `io.Reader` instead of `*os.File`), but return a concrete struct so callers aren't forced to use type assertions to access specific fields or methods.
+Accept smallest useful interface (e.g. `io.Reader`, not `*os.File`); return concrete structs so callers avoid type assertions.
 
 ## Library API Design
 
 ### Domain Object as Entry Point
 
-When designing a Go library that wraps a stateful resource (a vault, a database connection, a config store), make that resource struct the primary object. Its methods return domain-typed sub-objects. **Avoid:**
+For libraries wrapping stateful resources (vault, database connection, config store), make resource struct primary object. Methods return domain sub-objects. **Avoid:**
 
 - Passing a config/resource struct as the first argument to every package-level function
 - Package-level global state (like pflag's default `FlagSet`) for library code that may be embedded
@@ -330,27 +328,27 @@ mtgs, err := v.Meetings()          // returns *meetings.Index, error
 p, err := idx.FindOne("Steve")     // *people.Person
 ```
 
-**Why this pattern:**
+**Why:**
 
-- The primary struct (`Vault`) is the single entry point — callers need just one import to get started
-- Sub-packages define the rich domain types (`people.Person`, `daily.Note`) — each type lives with the logic that owns it
-- No global state means the library is safe for concurrent use, multiple instances, and testing
-- Stateless method calls (reload fresh each time) keep the struct simple — no cache invalidation logic needed
-- Type inference (`:=`) means callers rarely need to explicitly import sub-packages for variable declarations
+- Primary struct (`Vault`) is single entry point; callers need one import
+- Subpackages define rich domain types (`people.Person`, `daily.Note`) with owning logic
+- No global state supports concurrency, multiple instances, and testing
+- Stateless calls reload fresh, avoiding cache invalidation
+- Type inference (`:=`) usually avoids explicit subpackage imports for declarations
 
-**When to use a global instance instead:** Only for CLI-only tools (like `pflag` itself) where there is truly only ever one instance and ease of use for end-users outweighs library correctness.
+**Global instance:** CLI-only tools (like `pflag`) with one instance where ease of use outweighs library correctness.
 
 ## Concurrency Patterns
 
-**Anti-Pattern:** Heavy, static Worker Pools. Go's scheduler is incredibly efficient; you don't need to manually manage pools of workers like OS threads in other languages.
+**Anti-Pattern:** Heavy static worker pools. Go scheduler is efficient; don't manage workers like OS threads.
 
 ### 1. Share Memory by Communicating
 
-Don't use mutexes to protect shared data if you can pass that data over a channel instead. Channels orchestrate execution; mutexes serialize execution.
+Prefer channels for shared data when possible. Channels orchestrate; mutexes serialize.
 
 ### 2. Bounded Concurrency
 
-To limit concurrency, use `errgroup` with `SetLimit`. Don't hand-roll a semaphore channel or a rigid worker pool when this exists.
+Limit concurrency with `errgroup` and `SetLimit`; don't hand-roll semaphore channels or rigid pools.
 
 ```go
 func FetchAll(ctx context.Context, urls []string, maxConcurrent int) error {
@@ -367,9 +365,9 @@ func FetchAll(ctx context.Context, urls []string, maxConcurrent int) error {
 }
 ```
 
-Loop variables are per-iteration since Go 1.22 — never emit the old `url := url` capture line.
+Loop variables are per-iteration since Go 1.22. Never emit old `url := url` capture.
 
-When you don't need error propagation, `sync.WaitGroup.Go` (Go 1.25) removes the Add/Done boilerplate:
+Without error propagation, `sync.WaitGroup.Go` (Go 1.25) removes Add/Done boilerplate:
 
 ```go
 var wg sync.WaitGroup
@@ -381,11 +379,11 @@ wg.Wait()
 
 ### 3. Never Start a Goroutine Without Knowing How It Stops
 
-Every `go func()` must have a clear exit condition, usually governed by a `context.Context` or a closed channel.
+Every `go func()` needs clear exit condition, usually `context.Context` or closed channel.
 
 ## Context: Pass It, Don't Store It
 
-`context.Context` carries cancellation, deadlines, and request-scoped values across API boundaries. A few rules govern it strictly — LLMs and inexperienced Go code both violate them constantly.
+`context.Context` carries cancellation, deadlines, and request-scoped values across API boundaries. Follow these strict rules:
 
 ### 1. `ctx` Is Always the First Parameter, Never Stored in a Struct
 
@@ -407,7 +405,7 @@ The one narrow exception is `http.Request.Context()` — the request itself is t
 
 ### 2. Propagate the Context You Were Given
 
-If a function receives a `ctx`, pass that same `ctx` (or a value derived from it via `context.WithCancel`, `WithTimeout`, `WithDeadline`, or `context.WithValue`) into everything it calls that also accepts one. Don't silently drop it and call `context.Background()` instead — that severs cancellation and deadline propagation for everything downstream.
+If function receives `ctx`, pass it or derived context (`context.WithCancel`, `WithTimeout`, `WithDeadline`, `context.WithValue`) to downstream calls. Never replace it with `context.Background()`; that severs cancellation and deadlines.
 
 ```go
 // Bad: caller's cancellation/deadline never reaches the query
@@ -421,11 +419,11 @@ func (s *Service) FetchUser(ctx context.Context, id string) (*User, error) {
 }
 ```
 
-`context.Background()` (or `context.TODO()` while a real context isn't available yet) belongs only at the true root of a call chain — `main`, the start of an incoming request, the top of a background job — never inside a function that already received a `ctx`.
+Use `context.Background()` or `context.TODO()` only at call-chain roots: `main`, incoming request start, background-job start. Never inside function already receiving `ctx`.
 
 ### 3. Use `context.WithoutCancel` to Deliberately Detach
 
-When a background task legitimately needs to outlive the request that spawned it, don't drop the context — detach it explicitly so values still propagate but cancellation doesn't:
+When background task must outlive spawning request, detach explicitly so values propagate but cancellation doesn't:
 
 ```go
 // The background job should keep running even after the HTTP request context cancels.
@@ -433,11 +431,11 @@ bgCtx := context.WithoutCancel(requestCtx)
 go doBackgroundWork(bgCtx)
 ```
 
-This documents the intent at the call site instead of leaving a reader to wonder whether dropping the context was a bug.
+Call site documents intent instead of hiding possible context bug.
 
 ### 4. `context.Value` Is for Request-Scoped Data, Not Optional Parameters
 
-Reach for `WithValue` only for things that cut across API boundaries and aren't naturally part of a function's signature — a request ID, a trace span, an auth principal set by middleware. Don't use it to pass regular arguments a function actually depends on; those belong as explicit parameters, which keeps the function's dependencies visible and the function testable without faking a context.
+Use `WithValue` only for cross-boundary request data absent from natural signature: request ID, trace span, middleware-set auth principal. Regular dependencies belong as explicit parameters.
 
 ```go
 // Idiomatic: request-scoped, cross-cutting, set by middleware, read deep in the call stack
@@ -447,11 +445,11 @@ ctx = context.WithValue(ctx, requestIDKey{}, reqID)
 ctx = context.WithValue(ctx, userIDKey{}, userID) // FetchUser(ctx, userID) instead
 ```
 
-Always use an unexported key type (`type requestIDKey struct{}`), never a `string` or other exported type, to avoid collisions between packages.
+Always use unexported key type (`type requestIDKey struct{}`), never `string` or exported type; prevents package collisions.
 
 ### 5. A `context.Context` Cancellation Doesn't Stop Execution — Check It
 
-Passing a `ctx` down doesn't automatically abort work; code has to check `ctx.Err()` or select on `ctx.Done()` at the points where it matters — before expensive work, in loop iterations, around blocking calls (most stdlib I/O already respects it, like `QueryRowContext` and `http.Client` with a context-carrying request).
+Passing `ctx` doesn't abort work automatically. Check `ctx.Err()` or select `ctx.Done()` before expensive work, in loops, and around blocking calls. Most stdlib I/O already respects it, e.g. `QueryRowContext` and context-carrying `http.Client` requests.
 
 ```go
 for _, item := range items {
@@ -468,7 +466,7 @@ for _, item := range items {
 
 ### Functional Options for Complex Initialization
 
-When a struct has many optional configuration parameters, avoid massive constructors. Use the Functional Options pattern.
+For many optional config parameters, avoid massive constructors. Use Functional Options.
 
 ```go
 type Server struct {
@@ -498,11 +496,11 @@ func NewServer(addr string, opts ...Option) *Server {
 
 ### 1. Errors are Values
 
-Errors aren't exceptions to be caught; they are values to be handled. Check them explicitly.
+Errors are values, not exceptions. Check explicitly.
 
 ### 2. Wrap for Context, Not for Stack Traces
 
-When returning an error, add context about what you were trying to do.
+Wrap returned errors with operation context.
 
 ```go
 // Idiomatic
@@ -514,7 +512,7 @@ if err != nil {
 
 ### 3. Log or Return — Never Both
 
-Logging an error counts as handling it. If you log an error, don't also return it up the stack; if you return it, don't also log it at that site. Doing both means the same failure gets logged once per layer as it propagates, polluting logs with duplicate noise for a single root cause.
+Logging handles an error. Log or return, never both at same layer; otherwise one failure pollutes logs at every layer.
 
 ```go
 // Bad: logged here, then logged again (and again) by every caller that also logs before returning
@@ -532,15 +530,15 @@ if err != nil {
 }
 ```
 
-Log at the boundary where an error is actually handled instead of propagated further — top of a request handler, a background job's outer loop, `main`. Below that boundary, wrap and return. A deliberate exception: logging at a lower level as a warning while still continuing (not returning) is handling, not duplication — e.g. a non-fatal cache-write failure that you log and move past.
+Log where error is handled, not propagated: request-handler top, background-job outer loop, `main`. Below boundary, wrap and return. Exception: log lower-level nonfatal warnings while continuing, e.g. cache-write failure.
 
 ## Testing Patterns
 
-**Anti-Pattern:** Relying on heavy BDD frameworks (like Ginkgo) or complex mocking generation tools. Go testing should just be Go programming.
+**Anti-Pattern:** Heavy BDD frameworks (like Ginkgo) or generated mocks. Go tests should stay Go.
 
 ### 1. Table-Driven Tests
 
-The absolute standard for unit testing in Go. Iterate over a slice of structs containing inputs and expected outputs using `t.Run()`.
+Go unit-test standard: table of inputs/expected outputs, iterated with `t.Run()`.
 
 ```go
 func TestParseConfig(t *testing.T) {
@@ -566,19 +564,19 @@ func TestParseConfig(t *testing.T) {
 
 ### 2. Meaningful Helpers with `t.Helper()`
 
-When extracting repeated assertion logic, always call `t.Helper()` to ensure failures point to the actual test case, not the helper function line.
+Call `t.Helper()` in assertion helpers so failures point to test case, not helper.
 
 ### 3. Fakes and Stubs over Heavy Mocks
 
-Leverage Go's implicit interfaces to write simple, manual fakes. This keeps test dependencies lightweight and test logic transparent.
+Use implicit interfaces and manual fakes. Keeps dependencies light and tests clear.
 
 ### 4. Golden Files and the `testdata` Directory
 
-For tests requiring complex inputs or producing large outputs, use a directory named `testdata`. The `go test` tool explicitly ignores these directories.
+Use `testdata` for complex inputs or large outputs; `go test` ignores it.
 
 ### 5. Filesystem Abstraction (The Afero Pattern)
 
-Do not hardcode `os` package calls deep within business logic. Accept an interface for the filesystem so tests can run in memory without touching the disk. `github.com/spf13/afero` is the industry standard for this.
+Don't hardcode `os` calls in business logic. Accept filesystem interface for in-memory tests. `github.com/spf13/afero` is standard.
 
 ```go
 import "github.com/spf13/afero"
@@ -592,11 +590,11 @@ func NewFileProcessor(fs afero.Fs) *FileProcessor {
 }
 ```
 
-In tests, inject `afero.NewMemMapFs()` to completely eliminate disk I/O and prevent flaky, slow tests.
+Inject `afero.NewMemMapFs()` in tests to eliminate disk I/O and flaky, slow tests.
 
 ### 6. `cmp` over DeepEqual
 
-For comparing complex structs or maps, use `github.com/google/go-cmp/cmp` for rich, readable diffs instead of the strict `reflect.DeepEqual`.
+Compare complex structs/maps with `github.com/google/go-cmp/cmp`, not strict `reflect.DeepEqual`.
 
 ### 7. Modern `testing` Additions (Go 1.24+)
 
@@ -640,11 +638,11 @@ Never write `time.Sleep(100 * time.Millisecond)` to "wait for a goroutine" in a 
 
 ## Generics (Go 1.18+)
 
-Generics exist to eliminate duplicated algorithms, not to create type hierarchies. If you are thinking about generics in terms of inheritance or polymorphism, stop — you are writing Java.
+Generics eliminate duplicated algorithms, not create type hierarchies. Inheritance/polymorphism thinking means writing Java.
 
 ### When to Use Generics
 
-Use generics when you have the **same algorithm** that needs to operate on **multiple concrete types**:
+Use generics for the **same algorithm** across **multiple concrete types**:
 
 ```go
 // Good: generic algorithm, concrete types as inputs
@@ -681,12 +679,12 @@ type UserStore interface {
 }
 ```
 
-- **Do not** create generic base types, generic services, or generic repositories.
-- **Do not** use `any` as a constraint to mean "I don't know the type yet." That's a design smell.
-- **Do** use `comparable` when you need map keys or equality checks.
-- **Do** use `cmp.Ordered` when you need `<`, `>`, `<=`, `>=`.
-- Start with a concrete implementation. Generify only when you have the same logic repeated across 3+ types.
-- Generic type aliases are fully supported since Go 1.24.
+- **Do not** create generic base types, services, or repositories.
+- **Do not** use `any` constraint to mean "I don't know the type yet." Design smell.
+- **Do** use `comparable` for map keys/equality.
+- **Do** use `cmp.Ordered` for `<`, `>`, `<=`, `>=`.
+- Start concrete. Generify only when same logic repeats across 3+ types.
+- Generic type aliases supported since Go 1.24.
 
 ## Pointers to Values: `new(expr)` (Go 1.26)
 
@@ -716,7 +714,7 @@ cfg := Config{MaxRetries: new(3)}
 
 ## Standard Library: Use the New Packages
 
-LLMs frequently suggest third-party utilities or write manual helpers that have been in the standard library since Go 1.21. **Always check stdlib first.**
+LLMs suggest third-party utilities or manual helpers already in stdlib since Go 1.21. **Always check stdlib first.**
 
 ### `slices` package (Go 1.21)
 
@@ -775,7 +773,7 @@ min(a, b)            // built-in since Go 1.21
 max(a, b)            // built-in since Go 1.21
 ```
 
-`cmp.Or` is especially useful for default-value patterns:
+Use `cmp.Or` for default values:
 
 ```go
 // Instead of: if cfg.Timeout == 0 { cfg.Timeout = 30 * time.Second }
@@ -796,7 +794,7 @@ Use this instead of `fmt.Errorf("%w; %w", err1, err2)` or any `multierr` package
 
 ### Iterators: `iter` and Range-over-Func (Go 1.23)
 
-The standard way to expose a sequence from an API without allocating a slice. Return `iter.Seq[T]` or `iter.Seq2[K, V]`; callers use plain `range`:
+Expose sequences without slice allocation with `iter.Seq[T]` or `iter.Seq2[K, V]`; callers use plain `range`:
 
 ```go
 func (idx *Index) All() iter.Seq[*Person] {
@@ -813,11 +811,11 @@ func (idx *Index) All() iter.Seq[*Person] {
 for p := range idx.All() { ... }
 ```
 
-Prefer returning iterators over slices for large or lazily-produced sequences. Don't invent a custom `Next()/HasNext()` iterator type — that's Java.
+Prefer iterators over slices for large/lazy sequences. Don't invent `Next()/HasNext()` iterators; that's Java.
 
 ### `math/rand/v2` (Go 1.22)
 
-Always import `math/rand/v2`, never the old `math/rand`. Auto-seeded, cleaner API:
+Import `math/rand/v2`, never old `math/rand`. Auto-seeded, cleaner API:
 
 ```go
 import "math/rand/v2"
@@ -828,7 +826,7 @@ rand.N(10 * time.Second)  // generic: random value in [0, n) for any integer typ
 
 ### `encoding/json`: `omitzero` (Go 1.24)
 
-`omitzero` omits any zero value — including `time.Time{}` and zero structs, which `omitempty` never handled correctly:
+`omitzero` omits any zero value, including `time.Time{}` and zero structs; `omitempty` doesn't.
 
 ```go
 type Event struct {
@@ -841,7 +839,7 @@ type Event struct {
 
 ### `sync/atomic` Typed Values (Go 1.19)
 
-Use the typed atomic values instead of the function-based API:
+Use typed atomic values, not function API:
 
 ```go
 // Old (still works but avoid for new code)
@@ -867,7 +865,7 @@ See "Use `context.WithoutCancel` to Deliberately Detach" under Context above.
 
 ## HTTP: Use the Improved stdlib Router (Go 1.22)
 
-LLMs reflexively recommend gorilla/mux or chi for any routing beyond the trivial. Since Go 1.22, the standard `net/http` ServeMux handles method and path-parameter routing natively.
+Since Go 1.22, standard `net/http` ServeMux handles method and path-parameter routing natively; don't reflexively use gorilla/mux or chi.
 
 ```go
 mux := http.NewServeMux()
@@ -886,11 +884,11 @@ mux.HandleFunc("GET /users/{id}", func(w http.ResponseWriter, r *http.Request) {
 mux.HandleFunc("GET /files/{path...}", serveFile)
 ```
 
-Reach for chi or gorilla/mux only when you need named route generation or regex constraints — middleware doesn't justify a framework (see below). For pure method + path routing, the stdlib is sufficient.
+Use chi or gorilla/mux only for named route generation or regex constraints. Middleware alone doesn't justify framework. Stdlib handles method + path routing.
 
 ### Production Servers: Always Set Timeouts
 
-`http.ListenAndServe(addr, mux)` ships with **no timeouts** — a single slow client can hold a connection open forever (slow-loris). LLM-generated servers almost never set these. Never emit a production server without them:
+`http.ListenAndServe(addr, mux)` has **no timeouts**; slow clients can hold connections forever (slow-loris). Never emit production server without timeouts:
 
 ```go
 srv := &http.Server{
@@ -903,11 +901,11 @@ srv := &http.Server{
 }
 ```
 
-For per-route control beyond `WriteTimeout`, use `http.TimeoutHandler` or handler-level `context.WithTimeout`. Outbound calls need the same discipline: `http.DefaultClient` has no timeout either — construct a client with one.
+For per-route control beyond `WriteTimeout`, use `http.TimeoutHandler` or handler-level `context.WithTimeout`. `http.DefaultClient` also has no timeout; construct one.
 
 ### Graceful Shutdown
 
-Every production server needs a shutdown path that stops accepting connections and drains in-flight requests. The pattern:
+Every production server needs shutdown path to stop accepting connections and drain in-flight requests:
 
 ```go
 func run(ctx context.Context) error {
@@ -930,12 +928,12 @@ func run(ctx context.Context) error {
 }
 ```
 
-- `Shutdown` needs a fresh context with its own deadline — the signal context is already canceled.
-- Long-lived connections (SSE, websockets) must watch `r.Context()` or they'll hold shutdown until the drain deadline.
+- `Shutdown` needs fresh context with own deadline; signal context is canceled.
+- Long-lived connections (SSE, websockets) must watch `r.Context()` or hold shutdown until drain deadline.
 
 ### Middleware Is Just a Function
 
-No framework needed. A middleware is `func(http.Handler) http.Handler`:
+No framework needed. Middleware is `func(http.Handler) http.Handler`:
 
 ```go
 func withRequestLog(logger *slog.Logger, next http.Handler) http.Handler {
@@ -950,11 +948,11 @@ func withRequestLog(logger *slog.Logger, next http.Handler) http.Handler {
 handler := withRequestLog(logger, withAuth(mux))
 ```
 
-Don't import a middleware framework for what function composition already does.
+Don't import middleware framework for function composition.
 
 ## Syntax: Use Current Go
 
-LLMs frequently generate outdated syntax. Know the current idioms:
+LLMs generate outdated syntax. Use current idioms:
 
 ### Range over Integer (Go 1.22)
 
@@ -976,7 +974,7 @@ for i := range 10 { ... }
 //go:build linux || darwin
 ```
 
-The `//go:build` form is required since Go 1.17. Never emit the old `// +build` syntax.
+`//go:build` required since Go 1.17. Never emit old `// +build` syntax.
 
 ### `any` Instead of `interface{}`
 
@@ -990,7 +988,7 @@ func Print(v any) { ... }
 
 ### Tool Dependencies in `go.mod` (Go 1.24)
 
-Never generate a `tools.go` file with blank imports. Track dev tools with the `tool` directive:
+Never generate `tools.go` with blank imports. Track dev tools with `tool` directive:
 
 ```bash
 go get -tool golang.org/x/tools/cmd/stringer
@@ -999,7 +997,7 @@ go tool stringer -type=Color   # run it
 
 ## Structured Logging with `log/slog` (Go 1.21)
 
-The skill note above covers basic setup. The patterns LLMs most often get wrong:
+Common `log/slog` mistakes:
 
 ```go
 // Pass a logger via context for request-scoped logging
@@ -1024,33 +1022,33 @@ logger.Warn("retrying", "attempt", n)       // recoverable problems
 logger.Error("request failed", "err", err)  // needs attention
 ```
 
-- **Never** use a package-level `log` or `slog` global beyond `main`. Pass `*slog.Logger` as a dependency.
-- **Never** log and return an error — see "Log or Return — Never Both" under Error Handling.
-- Use `slog.Default()` as the fallback only in `main` or in libraries when no logger is provided.
+- **Never** use package-level `log` or `slog` global beyond `main`. Pass `*slog.Logger` as dependency.
+- **Never** log and return an error; see "Log or Return — Never Both" under Error Handling.
+- Use `slog.Default()` as fallback only in `main` or libraries without logger.
 
 ## Debugging: The Go Toolchain Is Not the Problem
 
-**The Go tool is extremely reliable. It is almost never the source of a bug.**
+**Go tool is reliable; almost never bug source.**
 
-When debugging, do not waste time suspecting `go run`, `go build`, `go test`, or the build cache. The Go toolchain does what it says:
+When debugging, don't suspect `go run`, `go build`, `go test`, or build cache first. Toolchain does what it says:
 
 - `go run` always recompiles from source. It does not use a stale cached binary.
 - `go build` is deterministic and correct.
 - `go test` runs the actual compiled test binary.
 - The build cache is keyed by source content — if the source changed, the cache is invalidated automatically.
 
-**If an error persists after you edit the code, the explanation is one of these — in order of likelihood:**
+**If error persists after edit, explanations in likelihood order:**
 
 1. The edit did not fix the underlying logic error.
 2. The edit was made in the wrong file, wrong function, or wrong package.
 3. There is a second call site with the same bug that was not updated.
 4. The error is coming from a different code path than the one being edited.
 
-**What to do instead of blaming the tool:**
+**Do this instead of blaming tool:**
 
-- Re-read the error message carefully. Go's error messages are accurate.
-- Confirm the file you edited is actually the file being compiled (`go list -f '{{.GoFiles}}' .`).
-- Add a `fmt.Println` or `t.Log` at the exact site to verify execution reaches it.
-- Check that all call sites of a changed function were updated.
+- Re-read error; Go error messages are accurate.
+- Confirm edited file is compiled (`go list -f '{{.GoFiles}}' .`).
+- Add `fmt.Println` or `t.Log` at exact site to verify execution.
+- Check all call sites of changed function.
 
-Do not suggest clearing the build cache (`go clean -cache`), restarting the Go toolchain, or any other tool-level intervention before first exhausting all code-level explanations. The tool is not lying to you.
+Don't suggest clearing build cache (`go clean -cache`), restarting toolchain, or other tool intervention before exhausting code explanations. Tool isn't lying.
