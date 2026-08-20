@@ -55,7 +55,17 @@ func (c *Counter) Inc() {
 
 ### 3. Return Early, Keep the Happy Path Left
 
-Handle errors and edge cases immediately. Return early; avoid `else` for main logic. Keep happy path unindented.
+Handle errors and edge cases immediately. Return early; avoid `else` for main logic. Keep happy path unindented. Do not put short variable declarations and statements inside an `if err` initializer when checking multiple error cases. Declare the error first, then use separate sequential checks:
+
+```go
+_, err := r.GetGroupByID(ctx, groupID)
+if errors.Is(err, pgx.ErrNoRows) {
+	return groups.ErrNotFound
+}
+if err != nil {
+	return fmt.Errorf("check group: %w", err)
+}
+```
 
 ### 4. Separate Logical Sections with Blank Lines
 
